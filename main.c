@@ -18,6 +18,12 @@ void lancer_simulation() {
     // Initialisation
     srand(time(NULL));
 
+     FILE *log_file = fopen("log.txt", "w");
+    if (log_file == NULL) {
+        printf("Erreur: impossible de créer le fichier log.txt\n");
+        return;
+    }
+
     printf("\nSimulateur de Reseau de Capteurs Contraints\n\n");
 
     // Demander la position et la batterie
@@ -32,7 +38,7 @@ void lancer_simulation() {
     // Buffer fixé à 5
     initialiser_buffer(&capteur, 5);
 
-    printf("\n--- Configuration initiale du capteur ---\n");
+    printf("\nConfiguration initiale du capteur \n");
     printf("Position: (%.2f, %.2f)\n", capteur.x, capteur.y);
     printf("Batterie initiale: %.4f J\n", capteur.battery);
 
@@ -45,6 +51,13 @@ void lancer_simulation() {
     printf("Transmissions possibles initialement: %d\n", transmissions_possibles);
     printf("0/5 paquets en attentes\n\n");
 
+    fprintf(log_file, "Fichier de simulation \n");
+    fprintf(log_file, "Position: (%.2f, %.2f)\n", capteur.x, capteur.y);
+    fprintf(log_file, "Batterie initiale: %.4f J\n", capteur.battery);
+    fprintf(log_file, "Distance: %.2f | Energie/transmission: %.4f J\n\n",
+            distance, energie_transmission);
+    fprintf(log_file, "Temps | Batterie | Paquets en attente\n");
+    fprintf(log_file, "------|----------|-------------------\n");
     // Demander si on veut charger des paquets précédents
     printf("Voulez-vous charger les 5 derniers paquets dune sauvegarde ?\n");
     printf("1. Oui\n");
@@ -64,7 +77,7 @@ void lancer_simulation() {
     printf("Le capteur produit et transmet des paquets jusqua epuisement de la batterie.\n");
     printf("A chaque cycle: 1. Production dun paquet, 2. Transmission dun paquet\n");
     printf("Condition darret: Batterie = 0 J (capteur 'mort')\n");
-    printf("--------------------------------------------------\n");
+
 
     // Production et transmission jusqu'à épuisement de la batterie
     int buffer_virtuel = 0;
@@ -73,7 +86,7 @@ void lancer_simulation() {
         printf("Batterie au debut du cycle: %.4f J\n", capteur.battery);
 
         // 1. PRODUCTION D'UN PAQUET
-        printf("\nPRODUCTION\n");
+        printf("\nProduction\n");
         produire_paquet(&capteur);
         paquets_produits++;
          // Calcul des paquets en attente (simulation)
@@ -95,13 +108,23 @@ void lancer_simulation() {
             // L'ID supprimé virtuellement est : paquets_produits - 6
             // Car si on a produit 6 paquets, le premier (ID 0) est supprimé
             int id_supprime = paquets_produits - 6;
-            printf("ALERTE : Mémoire saturée. Suppression du paquet ID=%d pour libérer de l'espace.\n",
+            printf("ALERTE : Memoire saturee. Suppression du paquet ID=%d pour libérer de l'espace.\n",
                    id_supprime);
         }
 
 
         // 2. TRANSMISSION D'UN PAQUET (si buffer non vide)
-        printf("\nTRANSMISSION\n");
+        printf("\nTransmission\n");
+         int paquets_en_attente_avant = paquets_produits - paquets_transmis;
+        if (paquets_en_attente_avant > 5) {
+            paquets_en_attente_avant = 5;  // Maximum 5
+            // Afficher l'alerte de mémoire saturée
+            int id_supprime = paquets_produits - 6;  // ID du plus ancien
+            printf("ALERTE : Mémoire saturée. Suppression du paquet ID=%d pour libérer de l'espace.\n",
+                   id_supprime);
+        }
+
+        printf("Paquets en attente avant transmission: %d/5\n", paquets_en_attente_avant);
         if (capteur.buffer_usage > 0) {
             printf("Tentative de transmission du paquet le plus recent...\n");
 
@@ -114,14 +137,37 @@ void lancer_simulation() {
             if (transmission_reussie) {
                 paquets_transmis++;  // INCrémenter le compteur
                 printf("TRANSMISSION REUSSIE !\n");
-                printf("Paquet transmis avec succes.\n");
+
                 printf("Energie consommee: %.4f J\n", batterie_avant - capteur.battery);
+
                 printf("Total paquets transmis: %d\n", paquets_transmis);
+                 // CALCUL DES PAQUETS EN ATTENTE APRÈS TRANSMISSION
+                int paquets_en_attente_apres = paquets_produits - paquets_transmis;
+                if (paquets_en_attente_apres > 5) {
+                    paquets_en_attente_apres = 5;
+                }
+                if (paquets_en_attente_apres < 0) {
+                    paquets_en_attente_apres = 0;
+                }
+
+                printf("Paquets en attente après transmission: %d/5\n", paquets_en_attente_apres);
+
+                //  ÉCRITURE DANS LE LOG
+                fprintf(log_file, "%4ds | %8.2fJ | %d/5 en attente\n",temps + 1, capteur.battery, paquets_en_attente_apres);
+
             } else {
                 printf(" ECHEC DE TRANSMISSION - Batterie insuffisante\n");
                 printf("Batterie restante: %.4f J\n", capteur.battery);
                 printf("Energie requise: %.4f J\n", energie_transmission);
 
+                   // Afficher les paquets en attente même en cas d'échec
+                int paquets_en_attente = paquets_produits - paquets_transmis;
+                if (paquets_en_attente > 5) paquets_en_attente = 5;
+                printf("Paquets en attente non transmis: %d/5\n", paquets_en_attente);
+
+                // Écrire la dernière ligne dans le log
+                fprintf(log_file, "%4ds | %8.2fJ | %d/5 en attente\n",
+                        temps + 14, capteur.battery, paquets_en_attente);
                 // Si échec, la batterie est mise à 0 dans attempt_transmission()
                 // On sort de la boucle
                 break;
@@ -136,7 +182,7 @@ void lancer_simulation() {
         printf("\nETAT COURANT\n");
         printf("Cycle: %d\n", temps + 1);
         printf("Batterie: %.4f J\n", capteur.battery);
-        printf("Buffer: %d/5 paquets\n", capteur.buffer_usage);
+
         printf("Paquets produits totaux: %d\n", paquets_produits);
         printf("Paquets transmis totaux: %d\n", paquets_transmis);
 
@@ -155,15 +201,15 @@ void lancer_simulation() {
             printf("   Transmissions possibles restantes: %d\n", transmissions_restantes);
         }
     }
-
-    // ============ AFFICHAGE FINAL ============
+    fclose(log_file);
+    // AFFICHAGE FINAL
     printf("\n");
-    printf("========================================\n");
-    printf("         CAPTEUR HORS SERVICE\n");
-    printf("         (Batterie epuisee)\n");
-    printf("========================================\n");
 
-    printf("\n=== RAPPORT FINAL ===\n");
+    printf("         Capteur hors service \n");
+    printf("         (Batterie epuisee)\n");
+
+
+    printf("\nRapport final\n");
     printf("Durée de fonctionnement: %d cycles\n", temps);
     printf("Batterie initiale: %.4f J\n", capteur.battery + (paquets_transmis * energie_transmission));
     printf("Batterie finale: %.4f J\n", capteur.battery);
@@ -176,13 +222,10 @@ void lancer_simulation() {
     }
 
     printf("Paquets restants dans le buffer: %d/5\n", capteur.buffer_usage);
-    printf("Distance a la station: %.2f\n", distance);
-    printf("Energie consommee par transmission: %.4f J\n", energie_transmission);
-    printf("Energie totale consommee: %.4f J\n", paquets_transmis * energie_transmission);
 
     // Demander si on veut sauvegarder les 5 derniers paquets
     int choix_sauvegarde;
-    printf("\nVoulez-vous sauvegarder les 5 derniers paquets non transmis ?\n");
+    printf("\nVoulez-vous sauvegarder le  dernier paquet ?\n");
     printf("1. Oui\n");
     printf("2. Non\n");
     printf("Choix: ");
@@ -196,15 +239,15 @@ void lancer_simulation() {
     // Nettoyage final
     liberer_buffer(&capteur);
 
-    printf("\n=== SIMULATION TERMINEE ===\n");
+    printf("\nSimulation terminee \n");
 }
 
 int main() {
     int choix = 0;
 
 
-    printf(" SIMULATEUR DE CAPTEUR INTELLIGENT\n");
-    printf("========================================\n");
+    printf(" Simulateur de Reseau de Capteurs Contraints\n");
+
     printf("1. Lancer une nouvelle simulation\n");
     printf("2. Quitter\n");
     printf("Choix : ");
